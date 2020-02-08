@@ -1,0 +1,13 @@
+[package]
+name = "configmapper"
+version = "0.1.3"
+authors = ["Colum McGaly"]
+edition = "2018"
+
+[dependencies]
+log = "0.4"
+env_logger = "0.7"
+clap = "2.33"
+regex = "1.3"
+consul = "0.3"  # consul library
+base64 = "0.11"
