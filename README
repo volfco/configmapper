@@ -1,3 +1,26 @@
 
     configmapper.
+    a simple program that can generate configuration files on demand based on a template.
 
+    THIS IS A ALPHA PRODUCT. DO NOT EXPCT THE API TO REMAIN STABLE.
+
+    background.
+    the way I develop my rust programs is that they all accept a toml configuration file. moving these daemons into a
+    containerized environment such as nomad or kubernetes presents the issue of needing to dynamically generate the
+    configuration file from environmental variables as well as consul. nomad uses environmental variables such as
+    NOMAD_ADDR_http and NOMAD_PORT_http to tell where the application to bind to. configmapper is a easy way to convert
+    this dynamic data into a config file at runtime.
+
+    supported data sources.
+    - environmental variables.
+      {{ENV|NOMAD_IP_http}} where ENV is the source, and NOMAD_IP_http is the environmental variable to look for
+    - consul key value.
+      {{CONSUL_KV|prod/nyc1/apps/megatron/db_uri}} where CONSUL_KV is the source, and prod/nyc1/apps... is the key to
+      query consul for.
+
+    more data sources are planned as I encounter the need for them. feel free to open up an issue to request other
+    data sources.
+
+    arguments.
+    -i      input file.
+    -o      output file.
