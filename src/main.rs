@@ -48,6 +48,10 @@ fn get_consul(key: &str) -> Result<String, ()> {
     return Ok(decoded.unwrap());
 }
 
+fn process_file() {
+
+}
+
 fn main() {
     env_logger::init();
     let matches = App::new("configmapper")
@@ -87,32 +91,38 @@ fn main() {
         exit(2);
     }
 
-    let re = Regex::new("\\{\\{(.*?)\\|(.*?)}}").unwrap();
-    let iraw = raw.clone();
-    for inner in re.find_iter(&iraw) {
-        // we can assume because we're here, the capture is valid
-        let captures = re.captures(inner.as_str()).unwrap();
-        let source = captures.get(1).map_or("", |m| m.as_str());
-        let value = captures.get(2).map_or("", |m| m.as_str());
+    // loop over this process three times. This allows us to embed configuration inside configuration
+    //
+    for i in 0..2 {
+        info!("loop {} over config", i);
+        let re = Regex::new("\\{\\{(.*?)\\|(.*?)}}").unwrap();
+        let iraw = raw.clone();
+        for inner in re.find_iter(&iraw) {
+            // we can assume because we're here, the capture is valid
+            let captures = re.captures(inner.as_str()).unwrap();
+            let source = captures.get(1).map_or("", |m| m.as_str());
+            let value = captures.get(2).map_or("", |m| m.as_str());
 
-        let result = match source {
-            "ENV"           => get_env(value),
-            "CONSUL_KV"     => get_consul(value),
-            _               => {
-                warn!("undefined search type: {}", source);
-                Err(())
+            let result = match source {
+                "ENV"           => get_env(value),
+                "CONSUL_KV"     => get_consul(value),
+                _               => {
+                    warn!("undefined search type: {}", source);
+                    Err(())
+                }
+            };
+
+            if result.is_err() {
+                error!("an error occured while matching {}", inner.as_str());
+                exit(1);
             }
-        };
 
-        if result.is_err() {
-            error!("an error occured while matching {}", inner.as_str());
-            exit(1);
+            let result = result.unwrap();
+            raw = raw.replace(inner.as_str(), result.as_str());
+
         }
-
-        let result = result.unwrap();
-        raw = raw.replace(inner.as_str(), result.as_str());
-
     }
+
 
     info!("writing {}", output);
     let fs_handle = fs::File::create(output.clone());
