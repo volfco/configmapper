@@ -2,7 +2,11 @@
     configmapper.
     a simple program that can generate configuration files on demand based on a template.
 
-    THIS IS A ALPHA PRODUCT. DO NOT EXPCT THE API TO REMAIN STABLE.
+    Please consider this an alpha project. Each minor version up until 1.0 might have a breaking API change.
+
+    [+] Stable Templating Engine
+    [-] Unstable Default Behavior
+    [-] Unstable Function functionality
 
     background.
     the way I develop my rust programs is that they all accept a toml configuration file. moving these daemons into a
@@ -11,16 +15,67 @@
     NOMAD_ADDR_http and NOMAD_PORT_http to tell where the application to bind to. configmapper is a easy way to convert
     this dynamic data into a config file at runtime.
 
-    supported data sources.
-    - environmental variables.
-      {{ENV|NOMAD_IP_http}} where ENV is the source, and NOMAD_IP_http is the environmental variable to look for
-    - consul key value.
-      {{CONSUL_KV|prod/nyc1/apps/megatron/db_uri}} where CONSUL_KV is the source, and prod/nyc1/apps... is the key to
-      query consul for.
-
-    more data sources are planned as I encounter the need for them. feel free to open up an issue to request other
-    data sources.
+    this program is ideal for use in docker containers, read only images, or some other case where you're generating
+    a disposable environment.
 
     arguments.
-    -i      input file.
-    -o      output file.
+    -i  --input             input file.
+    -o  --output            output file.
+    --stdin                 reads stdin as config template input, conflicts with --input
+    --stdout                writes generated config to stdout, conflicts with --output and --stderr
+    --stderr                writes generated config to stderr, conflicts with --output and --stdout.
+                              redirects logs to stdout
+    -c  --config            configuration file. CLI arguments superscede config file
+
+    template overview.
+
+    this program uses the handlebar library, which was the only option that supports at runtime templates in Rust. You
+    can find a language reference here:
+
+    templates are evaluated, by default, three times. This allows you to embed partial configuration in, say, consul
+    that contains environmental variables containing sidecar information. There is nothing additional required to take
+    advantage of this. for example, I can have "tcp://user:password@{{ env sidecar_ip 127.0.0.1:3300 }}" as my consul
+    key, and then my template can call consul to lookup that key. The lookup would be evaluated in the first iteration
+    and then the template from consul would be evaluated in the second run.
+
+    There is no way to pass data/state between evaluations.
+
+
+    template functions.
+
+    consul.
+
+      consul "<key>" "<default (optional)>"
+        queries consul for a specified key. If a default value is provided, the default value will be used if consul
+        can't be reached, the client can't access the key, or the key doesn't exist.
+
+      consul_service <name> <tags> <default value> <default value> <default value> <default value>...
+        queries consul for the specified service, matching provided tags. Default Services can be specified up to N
+        number. If no services are defined, the lookup will fail and stop templating generation.
+
+        services are returned in a <ip>:<port> pair
+
+        an example that looks for the foobar service matching env=prod and shard=1, with two default options:
+        consul_service foorbar env=prod,shard=a 127.0.0.1:9304 127.0.0.1:9305
+
+    vault.
+
+    dns.
+
+      dns "<hostname>" "<RType>" "<default>"
+        queries the local resolver for the specified hostname and record type. the default value if the dns server
+        returns anything other then a successful response.
+
+        SRV records are processed and returned as a string in the <ip>:<port> format.
+
+    os.
+
+      env "<key>" "<default>"
+
+      source "<file>" "<variable>"
+        sources the specified file in a bash shell, and returns the specified variable. basically, the following is run:
+          bash -c "source <file>; echo \"${variable}\""
+        and the results are returned as a string.
+
+        WARNING: This is considered an unsafe function, as the file will be loaded and executed as the current user.
+                 --safe can be passed, or safe=True in the config file to prevent this function

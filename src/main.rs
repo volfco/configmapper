@@ -1,62 +1,28 @@
 #[macro_use] extern crate log;
+#[macro_use] extern crate handlebars;
+#[macro_use] extern crate serde_json;
 
-use consul;
 use std::fs;
 use std::env;
 use clap::{App, Arg};
 use regex::Regex;
 use std::process::exit;
 use std::io::{Read, Write};
-use consul::kv::KV;
 use std::env::args;
 use base64;
 
-fn get_env(key: &str) -> Result<String, ()> {
-    match env::var(key) {
-        Ok(value)    => Ok(value),
-        _                   => {
-            warn!("the environment does not contain the key {}", key);
-            Err(())
-        }
-    }
-}
 
-fn get_consul(key: &str) -> Result<String, ()> {
-    let config = consul::Config::new();
-    let mut config = config.unwrap();
-    let client = consul::Client::new(config);
+use handlebars::{Handlebars, Output, RenderContext, Context, Helper, RenderError, JsonRender};
 
-    let lookup = client.get(key, None);
-    if lookup.is_err() {
-        warn!("error occurred during consul lookup. {:?}", lookup.err().unwrap());
-        return Err(());
-    }
-    let kv = lookup.unwrap().0;
-    let inner = if kv.is_none() {
-        return Err(())
-    } else {
-        kv.unwrap().Value
-    };
+mod config;
+mod modules;
 
-    let decoder = base64::decode(&inner);
-    if decoder.is_err() {
-
-    }
-
-    let decoded = String::from_utf8(decoder.unwrap());
-
-    return Ok(decoded.unwrap());
-}
-
-fn process_file() {
-
-}
 
 fn main() {
     env_logger::init();
     let matches = App::new("configmapper")
-        .version("0.1.3")
-        .author("Colum")
+        .version("0.2.1")
+        .author("Colum McGaley <colum@volf.co>")
         .about("Does awesome things")
         .arg(Arg::with_name("input").short("i").long("input").help("Input file").required(true).takes_value(true))
         .arg(Arg::with_name("output").short("o").long("output").help("Output file").required(true).takes_value(true))
@@ -70,9 +36,9 @@ fn main() {
         exit(2);
     }
 
-    let mut output = "".to_string();
+    let mut output_path = "".to_string();
     if let Some(inner) = matches.value_of("output") {
-        output = inner.into();
+        output_path = inner.into();
     } else {
         error!("-o/--output required");
         exit(2);
@@ -91,43 +57,33 @@ fn main() {
         exit(2);
     }
 
-    // loop over this process three times. This allows us to embed configuration inside configuration
-    //
+
+    let mut reg = Handlebars::new();
+
+    // register the helper functions that power the magic of this program
+    reg.register_helper("env", Box::new(functions::get_env));
+    reg.register_helper("consul", Box::new(functions::get_consul));
+
+    // TODO we should allow n to be controlled via configuration
+    let mut output = raw;
     for i in 0..2 {
-        info!("loop {} over config", i);
-        let re = Regex::new("\\{\\{(.*?)\\|(.*?)}}").unwrap();
-        let iraw = raw.clone();
-        for inner in re.find_iter(&iraw) {
-            // we can assume because we're here, the capture is valid
-            let captures = re.captures(inner.as_str()).unwrap();
-            let source = captures.get(1).map_or("", |m| m.as_str());
-            let value = captures.get(2).map_or("", |m| m.as_str());
-
-            let result = match source {
-                "ENV"           => get_env(value),
-                "CONSUL_KV"     => get_consul(value),
-                _               => {
-                    warn!("undefined search type: {}", source);
-                    Err(())
-                }
-            };
-
-            if result.is_err() {
-                error!("an error occured while matching {}", inner.as_str());
-                exit(1);
-            }
-
-            let result = result.unwrap();
-            raw = raw.replace(inner.as_str(), result.as_str());
-
+        debug!("starting iteration {}", &i);
+        let template = reg.render_template(output.as_str(), &json!());
+        if template.is_err() {
+            error!("unable to render the template");
+            // TODO make the error handling better
+            error!("{:?}", template.err().unwrap());
+            exit(1);
         }
+
+        output = template.unwrap();
     }
 
 
-    info!("writing {}", output);
-    let fs_handle = fs::File::create(output.clone());
+    info!("writing {}", output_path);
+    let fs_handle = fs::File::create(output_path.clone());
     if fs_handle.is_err() {
-        error!("unable to open {}. {:?}", &output, fs_handle.err().unwrap());
+        error!("unable to open {}. {:?}", &output_path, fs_handle.err().unwrap());
         exit(2);
     }
 

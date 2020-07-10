@@ -1,0 +1,19 @@
+[server]
+    bind = "{{ENV|NOMAD_IP_http}}{{ENV|NOMAD_PORT_http}}"
+    workers = 4
+
+[database]
+    uri = "{{CONSUL_KV|prod/nyc1/apps/megatron/db_uri}}"
+    timeout = 1000
+
+[notifications]
+    sendgrid = "{{CONSUL_KV|prod/nyc1/apps/megatron/sendgrid_key}}"
+
+[account]
+    # Configuration regarding User Session tokens
+    [session]
+    default_session_age = 1440  # minutes
+
+[dnssec]
+    discover = true
+    generator = "http://127.0.0.1:6381"

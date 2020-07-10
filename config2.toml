@@ -1,0 +1,3 @@
+[server]
+    bind = {{ consul TESTING "multi value" }}
+    workers = 4
